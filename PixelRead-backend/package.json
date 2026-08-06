@@ -1,0 +1,20 @@
+{
+  "name": "readmeshot-backend",
+  "version": "1.0.0",
+  "description": "Screenshot capture API for READMEShot — captures, frames, and composites website screenshots for READMEs.",
+  "type": "module",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js",
+    "postinstall": "playwright install --with-deps chromium"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^4.19.2",
+    "express-rate-limit": "^7.4.0",
+    "playwright": "^1.47.0",
+    "sharp": "^0.33.5",
+    "zod": "^3.23.8"
+  }
+}

@@ -1,5 +1,12 @@
 # 📸 PixelRead
 
+![GitHub stars](...)
+![License](...)
+![Last Commit](...)
+![React](...)
+![TypeScript](...)
+![Vercel](...)
+
 > Generate beautiful screenshots for your GitHub README in seconds.
 
 PixelRead is a modern developer tool that transforms any website into polished, presentation-ready screenshots with customizable browser frames, device mockups, gradients, and export options.

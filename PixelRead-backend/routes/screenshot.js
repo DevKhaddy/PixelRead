@@ -2,6 +2,8 @@ import { Router } from "express";
 import { z } from "zod";
 import { captureScreenshot } from "../services/capture.js";
 import { composeImage } from "../services/compose.js";
+import { saveShot } from "../services/store.js";
+import { uploadToImgbb } from "../services/upload.js";
 
 const router = Router();
 
@@ -20,6 +22,10 @@ const RequestSchema = z.object({
   size: z.enum(["og", "readme", "square", "mobile"]).default("readme"),
 });
 
+// Where the public image URLs are rooted. Override in production with
+// PUBLIC_BASE_URL=https://shots.example.com (or your deployed API host).
+const PUBLIC_BASE = (process.env.PUBLIC_BASE_URL || "http://localhost:8787").replace(/\/$/, "");
+
 const SIZE_MAP = {
   og: { w: 1200, h: 630 },
   readme: { w: 1280, h: 800 },
@@ -27,7 +33,7 @@ const SIZE_MAP = {
   mobile: { w: 390, h: 844 },
 };
 
-// POST /api/screenshot -> { pngBase64, markdown }
+// POST /api/screenshot -> { width, height, url, markdown }
 router.post("/screenshot", async (req, res) => {
   const parsed = RequestSchema.safeParse(req.body);
   if (!parsed.success) {
@@ -51,11 +57,24 @@ router.post("/screenshot", async (req, res) => {
     });
 
     const hostname = new URL(input.url).hostname;
+    const fileName = await saveShot(composed);
+
+    // Prefer a permanent public URL (ImgBB) when an API key is configured;
+    // otherwise fall back to the locally served /shots/<file>.png link.
+    let url = `${PUBLIC_BASE}/shots/${fileName}`;
+    if (process.env.IMGBB_API_KEY) {
+      try {
+        url = await uploadToImgbb(composed);
+      } catch (err) {
+        console.error("imgbb upload failed, falling back to local link:", err.message);
+      }
+    }
+
     res.json({
-      pngBase64: composed.toString("base64"),
       width: w,
       height: h,
-      markdown: `![${hostname}](https://your-cdn.example.com/shots/${Date.now()}.png)`,
+      url,
+      markdown: `![${hostname}](${url})`,
     });
   } catch (err) {
     console.error("capture failed:", err.message);

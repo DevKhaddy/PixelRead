@@ -1,0 +1,13 @@
+node_modules/
+shots/
+*.log
+.env
+
+# Test / debug artifacts
+s.json
+urls.txt
+dl-*.png
+
+# OS files
+.DS_Store
+Thumbs.db

@@ -1,7 +1,12 @@
-import { chromium, devices } from "playwright";
+import { devices } from "playwright";
+import { getBrowser } from "./browser-pool.js";
 
 /**
- * Captures a raw screenshot of a URL using headless Chromium.
+ * Captures a raw screenshot of a URL using the shared Chromium instance.
+ *
+ * A fresh browser context is created per request for full isolation, then
+ * torn down immediately after the screenshot — the browser itself stays
+ * alive for the next call.
  *
  * @param {Object} opts
  * @param {string} opts.url - Target URL (must be http/https).
@@ -18,30 +23,34 @@ export async function captureScreenshot({
   width = 1440,
   height = 900,
 }) {
-  const browser = await chromium.launch({ headless: true });
+  const browser = await getBrowser();
+  const contextOptions = device === "mobile"
+    ? { ...devices["iPhone 14 Pro"], colorScheme: darkMode ? "dark" : "light" }
+    : {
+        viewport: { width, height },
+        deviceScaleFactor: 2,
+        colorScheme: darkMode ? "dark" : "light",
+      };
 
+  const context = await browser.newContext(contextOptions);
   try {
-    const contextOptions = device === "mobile"
-      ? { ...devices["iPhone 14 Pro"], colorScheme: darkMode ? "dark" : "light" }
-      : {
-          viewport: { width, height },
-          deviceScaleFactor: 2,
-          colorScheme: darkMode ? "dark" : "light",
-        };
-
-    const context = await browser.newContext(contextOptions);
     const page = await context.newPage();
 
-    // Reasonable timeout + wait for network to settle so SPA content renders.
-    await page.goto(url, { waitUntil: "networkidle", timeout: 20_000 });
+    // `networkidle` never fires on sites with websockets/long-polling (e.g.
+    // linear.app), so wait for the DOM, then give lazy content a settle window.
+    await page.goto(url, { waitUntil: "domcontentloaded", timeout: 20_000 });
 
-    // Give lazy-loaded content / fonts a brief moment to settle.
-    await page.waitForTimeout(400);
+    // Prefer a bounded network-idle wait (fast on quiet sites); fall back to a
+    // fixed settle so websocket-heavy sites don't hang the capture.
+    try {
+      await page.waitForLoadState("networkidle", { timeout: 4000 });
+    } catch {
+      await page.waitForTimeout(1500);
+    }
 
     const buffer = await page.screenshot({ type: "png" });
-    await context.close();
     return buffer;
   } finally {
-    await browser.close();
+    await context.close();
   }
 }

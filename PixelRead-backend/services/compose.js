@@ -15,8 +15,7 @@ const SHADOW_BLUR = { none: 0, sm: 30, md: 55, lg: 85 };
  * Wraps a raw page screenshot with rounded corners + a browser toolbar SVG.
  */
 async function applyFrame(rawBuffer, { browser, showToolbar, radius, srcUrl }) {
-  const img = sharp(rawBuffer);
-  const meta = await img.metadata();
+  const meta = await sharp(rawBuffer).metadata();
   const toolbarHeight = showToolbar && browser !== "none" ? 46 : 0;
 
   const toolbarSvg =
@@ -29,27 +28,30 @@ async function applyFrame(rawBuffer, { browser, showToolbar, radius, srcUrl }) {
          <text x="102" y="${toolbarHeight / 2 + 5}" font-family="monospace" font-size="13" fill="#8891A3">${srcUrl}</text>`
       : "";
 
-  const framed = sharp({
+  // Canvas dimensions are known up-front from the raw screenshot — do NOT call
+  // metadata() on a pipeline you intend to reuse: sharp consumes the operation
+  // queue there and silently blanks any later toBuffer() output.
+  const fw = meta.width;
+  const fh = meta.height + toolbarHeight;
+  const mask = Buffer.from(
+    `<svg width="${fw}" height="${fh}"><rect x="0" y="0" width="${fw}" height="${fh}" rx="${radius}" ry="${radius}" fill="#fff"/></svg>`
+  );
+
+  return sharp({
     create: {
-      width: meta.width,
-      height: meta.height + toolbarHeight,
+      width: fw,
+      height: fh,
       channels: 4,
       background: { r: 0, g: 0, b: 0, alpha: 0 },
     },
   })
     .composite([
-      { input: Buffer.from(`<svg width="${meta.width}" height="${toolbarHeight}">${toolbarSvg}</svg>`), top: 0, left: 0 },
+      { input: Buffer.from(`<svg width="${fw}" height="${toolbarHeight}">${toolbarSvg}</svg>`), top: 0, left: 0 },
       { input: rawBuffer, top: toolbarHeight, left: 0 },
+      { input: mask, blend: "dest-in" },
     ])
-    .png();
-
-  // Rounded-corner mask
-  const { width: fw, height: fh } = await framed.metadata();
-  const mask = Buffer.from(
-    `<svg width="${fw}" height="${fh}"><rect x="0" y="0" width="${fw}" height="${fh}" rx="${radius}" ry="${radius}" fill="#fff"/></svg>`
-  );
-
-  return framed.composite([{ input: mask, blend: "dest-in" }]).png().toBuffer();
+    .png()
+    .toBuffer();
 }
 
 /**
